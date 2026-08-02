@@ -1,0 +1,8 @@
+node_modules/
+mega_sessions/
+logs/
+.env
+*.log
+.cache/
+.local/
+.agents/
