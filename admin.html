@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dark Ima — Admin Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #080b12;
+  --surface: #0f1520;
+  --surface2: #161d2c;
+  --border: rgba(0,243,255,.15);
+  --cyan: #00f3ff;
+  --purple: #8b5cf6;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --glow: 0 0 20px rgba(0,243,255,.2);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* === SIDEBAR === */
+.sidebar {
+  position: fixed; top:0; left:0; bottom:0; width:260px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 100;
+}
+
+.brand {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap:12px;
+}
+
+.brand-logo {
+  width:42px; height:42px; border-radius:10px;
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px; color:#000;
+}
+
+.brand-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size:15px; font-weight:800;
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+
+.brand-sub { font-size:11px; color:var(--muted); }
+
+nav { padding:16px 12px; flex:1; overflow-y:auto; }
+
+.nav-section { font-size:10px; text-transform:uppercase; letter-spacing:2px;
+  color:var(--muted); padding:8px 8px 4px; margin-top:8px; }
+
+.nav-item {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:8px; cursor:pointer;
+  color:var(--muted); font-size:14px; font-weight:500;
+  transition:all .2s; margin-bottom:2px; border:none; background:none; width:100%; text-align:left;
+}
+
+.nav-item:hover { background: rgba(0,243,255,.08); color:var(--cyan); }
+.nav-item.active { background: rgba(0,243,255,.12); color:var(--cyan); }
+.nav-item i { width:18px; text-align:center; }
+
+.sidebar-footer {
+  padding:16px 20px;
+  border-top:1px solid var(--border);
+  font-size:12px; color:var(--muted);
+}
+
+/* === MAIN === */
+.main { margin-left:260px; padding:28px; min-height:100vh; }
+
+.topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:28px;
+}
+
+.page-title { font-family:'Orbitron',sans-serif; font-size:20px; font-weight:800;
+  background: linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+
+.status-badge {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 14px; border-radius:20px;
+  background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.3);
+  color:var(--green); font-size:12px;
+}
+
+.status-dot { width:7px; height:7px; border-radius:50%;
+  background:var(--green); animation:pulse 2s infinite; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* === STAT CARDS === */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius:14px; padding:20px;
+  position:relative; overflow:hidden;
+  transition:transform .2s;
+}
+
+.stat-card:hover { transform:translateY(-2px); box-shadow:var(--glow); }
+
+.stat-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+}
+
+.stat-icon {
+  width:40px; height:40px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; margin-bottom:12px;
+}
+
+.stat-icon.cyan { background:rgba(0,243,255,.1); color:var(--cyan); }
+.stat-icon.purple { background:rgba(139,92,246,.1); color:var(--purple); }
+.stat-icon.green { background:rgba(16,185,129,.1); color:var(--green); }
+.stat-icon.yellow { background:rgba(245,158,11,.1); color:var(--yellow); }
+
+.stat-val { font-size:28px; font-weight:700; font-family:'Orbitron',sans-serif; }
+.stat-label { font-size:12px; color:var(--muted); margin-top:4px; }
+
+/* === CARDS === */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius:14px; overflow:hidden; margin-bottom:20px;
+}
+
+.card-header {
+  padding:18px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+
+.card-title { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+.card-title i { color:var(--cyan); }
+
+.card-body { padding:20px; }
+
+/* === TABLE === */
+.table-wrap { overflow-x:auto; }
+
+table { width:100%; border-collapse:collapse; font-size:13px; }
+
+th {
+  text-align:left; padding:10px 14px;
+  font-size:11px; text-transform:uppercase; letter-spacing:1px;
+  color:var(--muted); border-bottom:1px solid var(--border);
+  font-weight:600;
+}
+
+td { padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.04); }
+
+tr:hover td { background:rgba(0,243,255,.03); }
+tr:last-child td { border-bottom:none; }
+
+.badge {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600;
+}
+
+.badge-pair { background:rgba(0,243,255,.1); color:var(--cyan); border:1px solid rgba(0,243,255,.2); }
+.badge-qr { background:rgba(139,92,246,.1); color:var(--purple); border:1px solid rgba(139,92,246,.2); }
+
+/* === BUTTONS === */
+.btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 14px; border-radius:8px; font-size:12px; font-weight:600;
+  cursor:pointer; border:none; transition:all .2s;
+}
+
+.btn-sm { padding:5px 10px; font-size:11px; }
+.btn-cyan { background:rgba(0,243,255,.1); color:var(--cyan); border:1px solid rgba(0,243,255,.2); }
+.btn-cyan:hover { background:rgba(0,243,255,.2); }
+.btn-red { background:rgba(239,68,68,.1); color:var(--red); border:1px solid rgba(239,68,68,.2); }
+.btn-red:hover { background:rgba(239,68,68,.2); }
+.btn-green { background:rgba(16,185,129,.1); color:var(--green); border:1px solid rgba(16,185,129,.2); }
+.btn-green:hover { background:rgba(16,185,129,.2); }
+.btn-purple { background:rgba(139,92,246,.1); color:var(--purple); border:1px solid rgba(139,92,246,.2); }
+.btn-purple:hover { background:rgba(139,92,246,.2); }
+.btn-solid { background:linear-gradient(135deg,var(--cyan),var(--purple)); color:#000; font-weight:700; }
+
+/* === SESSION MODAL === */
+.modal-overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.7); backdrop-filter:blur(4px);
+  z-index:1000; align-items:center; justify-content:center;
+}
+
+.modal-overlay.open { display:flex; }
+
+.modal {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; width:90%; max-width:640px;
+  max-height:90vh; overflow-y:auto; padding:28px;
+  position:relative;
+}
+
+.modal-close {
+  position:absolute; top:16px; right:16px;
+  background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px;
+}
+
+.modal-close:hover { color:var(--text); }
+
+.modal-title { font-family:'Orbitron',sans-serif; font-size:16px; font-weight:800;
+  color:var(--cyan); margin-bottom:20px; }
+
+.session-str-box {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; padding:14px; font-family:monospace;
+  font-size:11px; word-break:break-all; color:var(--cyan);
+  max-height:120px; overflow-y:auto; margin-bottom:14px;
+  position:relative;
+}
+
+.copy-overlay {
+  position:absolute; top:8px; right:8px;
+  background:none; border:none; cursor:pointer; color:var(--muted);
+  font-size:14px; transition:.2s;
+}
+
+.copy-overlay:hover { color:var(--cyan); }
+
+.info-row { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.info-tag {
+  padding:4px 10px; border-radius:6px; font-size:12px;
+  background:rgba(0,243,255,.08); border:1px solid var(--border); color:var(--muted);
+}
+
+.deploy-section {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; padding:16px; margin-top:16px;
+}
+
+.deploy-title { font-size:13px; font-weight:600; color:var(--green); margin-bottom:10px; }
+
+.deploy-steps { list-style:none; }
+.deploy-steps li {
+  padding:6px 0; font-size:12px; color:var(--muted);
+  border-bottom:1px solid rgba(255,255,255,.04);
+  display:flex; gap:8px; align-items:flex-start;
+}
+
+.deploy-steps li:last-child { border-bottom:none; }
+.step-num {
+  width:20px; height:20px; border-radius:50%;
+  background:rgba(16,185,129,.15); color:var(--green);
+  font-size:10px; font-weight:700; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* === LOGIN === */
+#loginScreen {
+  position:fixed; inset:0;
+  background:var(--bg); display:flex;
+  align-items:center; justify-content:center; z-index:9999;
+}
+
+.login-box {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:40px; width:380px;
+  text-align:center;
+}
+
+.login-logo {
+  width:70px; height:70px; border-radius:16px;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  display:flex; align-items:center; justify-content:center;
+  font-size:32px; color:#000; margin:0 auto 20px;
+}
+
+.login-title { font-family:'Orbitron',sans-serif; font-size:18px; font-weight:800;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:6px; }
+
+.login-sub { font-size:13px; color:var(--muted); margin-bottom:28px; }
+
+.login-input {
+  width:100%; padding:12px 16px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; color:var(--text); font-size:14px;
+  margin-bottom:14px; outline:none;
+  transition:border-color .2s;
+}
+
+.login-input:focus { border-color:var(--cyan); }
+
+.login-btn {
+  width:100%; padding:13px;
+  background:linear-gradient(135deg,var(--cyan),var(--purple));
+  border:none; border-radius:10px; color:#000;
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px;
+  cursor:pointer; transition:opacity .2s;
+}
+
+.login-btn:hover { opacity:.9; }
+.login-error { color:var(--red); font-size:12px; margin-top:8px; display:none; }
+
+/* === TOAST === */
+.toast {
+  position:fixed; bottom:24px; right:24px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:12px 18px;
+  font-size:13px; font-weight:500; z-index:9999;
+  transform:translateY(100px); opacity:0; transition:all .3s;
+  display:flex; align-items:center; gap:8px;
+}
+
+.toast.show { transform:translateY(0); opacity:1; }
+.toast.success { border-color:rgba(16,185,129,.4); color:var(--green); }
+.toast.error { border-color:rgba(239,68,68,.4); color:var(--red); }
+
+/* === RESPONSIVE === */
+@media(max-width:900px){
+  .sidebar{ width:60px; }
+  .brand-name,.brand-sub,.nav-item span,.nav-section,.sidebar-footer{ display:none; }
+  .main{ margin-left:60px; padding:16px; }
+  .stats-grid{ grid-template-columns:1fr 1fr; }
+  .nav-item{ justify-content:center; }
+}
+
+@media(max-width:540px){
+  .stats-grid{ grid-template-columns:1fr; }
+}
+
+/* Hidden page sections */
+.page { display:none; }
+.page.active { display:block; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo"><i class="fas fa-shield-halved"></i></div>
+    <div class="login-title">DARK IMA</div>
+    <p class="login-sub">Admin Dashboard — Secure Access</p>
+    <input class="login-input" type="password" id="loginPass" placeholder="Enter admin password" autocomplete="current-password">
+    <button class="login-btn" onclick="doLogin()"><i class="fas fa-lock-open"></i> &nbsp;ENTER</button>
+    <p class="login-error" id="loginErr">❌ Incorrect password</p>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="brand">
+    <div class="brand-logo"><i class="fas fa-robot"></i></div>
+    <div>
+      <div class="brand-name">DARK IMA</div>
+      <div class="brand-sub">Admin Panel</div>
+    </div>
+  </div>
+  <nav>
+    <div class="nav-section">Main</div>
+    <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
+      <i class="fas fa-gauge-high"></i><span>Dashboard</span>
+    </button>
+    <button class="nav-item" data-page="sessions" onclick="showPage('sessions', this)">
+      <i class="fas fa-key"></i><span>Sessions</span>
+    </button>
+    <button class="nav-item" data-page="deploy" onclick="showPage('deploy', this)">
+      <i class="fas fa-rocket"></i><span>Deploy Bot</span>
+    </button>
+    <div class="nav-section">Tools</div>
+    <button class="nav-item" onclick="window.open('/', '_blank')">
+      <i class="fas fa-link"></i><span>Pair Site</span>
+    </button>
+    <button class="nav-item" onclick="refreshAll()">
+      <i class="fas fa-rotate"></i><span>Refresh</span>
+    </button>
+  </nav>
+  <div class="sidebar-footer">v2.0 · Dark Ima Bot</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="pageTitle">DASHBOARD</div>
+    <div class="status-badge"><div class="status-dot"></div>Server Online</div>
+  </div>
+
+  <!-- DASHBOARD PAGE -->
+  <div class="page active" id="page-dashboard">
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-icon cyan"><i class="fas fa-key"></i></div>
+        <div class="stat-val" id="statTotal">—</div>
+        <div class="stat-label">Total Sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i class="fas fa-mobile-alt"></i></div>
+        <div class="stat-val" id="statPair">—</div>
+        <div class="stat-label">Pair Code</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green"><i class="fas fa-qrcode"></i></div>
+        <div class="stat-val" id="statQR">—</div>
+        <div class="stat-label">QR Code</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon yellow"><i class="fas fa-clock"></i></div>
+        <div class="stat-val" id="statToday">—</div>
+        <div class="stat-label">Today</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-list"></i> Recent Sessions</div>
+        <button class="btn btn-cyan btn-sm" onclick="showPage('sessions', document.querySelector('[data-page=sessions]'))">
+          View All
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Phone</th><th>Type</th><th>Time</th><th>Action</th>
+            </tr></thead>
+            <tbody id="recentTable"><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SESSIONS PAGE -->
+  <div class="page" id="page-sessions">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-key"></i> All Sessions</div>
+        <div style="display:flex;gap:8px">
+          <input id="searchInput" type="text" placeholder="Search phone…"
+            style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;"
+            oninput="filterSessions()">
+          <button class="btn btn-cyan btn-sm" onclick="loadSessions()"><i class="fas fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Phone</th><th>Type</th><th>Date / Time</th><th>Session ID (preview)</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="sessionsTable"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPLOY PAGE -->
+  <div class="page" id="page-deploy">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-rocket"></i> Deploy WhatsApp Bot</div>
+      </div>
+      <div class="card-body">
+        <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">
+          Select a session to deploy a WhatsApp bot. Copy the session string and use it in your bot configuration.
+        </p>
+        <div id="deploySessionList" style="display:grid;gap:12px;"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-book"></i> Deployment Guide</div>
+      </div>
+      <div class="card-body">
+        <ol style="color:var(--muted);font-size:13px;line-height:2.2;padding-left:18px;">
+          <li>Generate a session on the <a href="/" target="_blank" style="color:var(--cyan)">Pair Site</a></li>
+          <li>Come back here and find your session under <b style="color:var(--text)">Sessions</b></li>
+          <li>Click <b style="color:var(--cyan)">Deploy</b> to get your session string</li>
+          <li>Copy the <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--cyan)">Dark_Ima=…</code> string</li>
+          <li>Paste it in your bot's <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--cyan)">SESSION_ID</code> environment variable</li>
+          <li>Download <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--cyan)">creds.json</code> and place it in your bot folder</li>
+          <li>Start your bot with <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--cyan)">npm start</code></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION MODAL -->
+<div class="modal-overlay" id="sessionModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+    <div class="modal-title" id="modalTitle">Session Details</div>
+    <div class="info-row" id="modalInfo"></div>
+
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+      <i class="fas fa-key" style="color:var(--cyan)"></i> Session String (Dark_Ima=…)
+    </p>
+    <div class="session-str-box" id="modalSessionStr">
+      <button class="copy-overlay" onclick="copySessionStr()" title="Copy"><i class="fas fa-copy"></i></button>
+      <span id="sessionStrContent">—</span>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="btn btn-cyan" onclick="copySessionStr()"><i class="fas fa-copy"></i> Copy Session</button>
+      <button class="btn btn-green" id="downloadBtn" onclick="downloadCreds()"><i class="fas fa-download"></i> Download creds.json</button>
+      <button class="btn btn-red" id="deleteBtn" onclick="deleteSession()"><i class="fas fa-trash"></i> Delete</button>
+    </div>
+
+    <div class="deploy-section">
+      <div class="deploy-title"><i class="fas fa-rocket"></i> &nbsp;How to deploy with this session</div>
+      <ul class="deploy-steps">
+        <li><span class="step-num">1</span>Copy the session string above</li>
+        <li><span class="step-num">2</span>In your bot repo, set <code style="color:var(--cyan)">SESSION_ID=&lt;paste here&gt;</code></li>
+        <li><span class="step-num">3</span>Download <code style="color:var(--cyan)">creds.json</code> → place in <code style="color:var(--cyan)">./auth/</code> folder</li>
+        <li><span class="step-num">4</span>Run <code style="color:var(--cyan)">npm install && npm start</code></li>
+        <li><span class="step-num">5</span>Your bot is now live! 🎉</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'dark_ima_auth';
+
+function doLogin() {
+  const pass = document.getElementById('loginPass').value;
+  fetch('/admin/api/login', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ password: pass })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      sessionStorage.setItem(STORAGE_KEY, '1');
+      document.getElementById('loginScreen').style.display = 'none';
+      init();
+    } else {
+      document.getElementById('loginErr').style.display = 'block';
+    }
+  }).catch(() => {
+    // Fallback if endpoint fails — try with default
+    document.getElementById('loginErr').style.display = 'block';
+  });
+}
+
+document.getElementById('loginPass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// Auto-skip login if already authenticated in this session
+if (sessionStorage.getItem(STORAGE_KEY)) {
+  document.getElementById('loginScreen').style.display = 'none';
+  setTimeout(init, 0);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────────
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('pageTitle').textContent = id.toUpperCase();
+  if (id === 'sessions') loadSessions();
+  if (id === 'deploy') loadDeployList();
+  if (id === 'dashboard') loadDashboard();
+}
+
+// ── Data ────────────────────────────────────────────────────────────────────────
+let allSessions = [];
+
+async function fetchSessions() {
+  const r = await fetch('/admin/api/sessions');
+  const d = await r.json();
+  return d.sessions || [];
+}
+
+function relativeTime(ts) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'Just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h/24) + 'd ago';
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  allSessions = await fetchSessions();
+  const today = new Date().toDateString();
+  document.getElementById('statTotal').textContent = allSessions.length;
+  document.getElementById('statPair').textContent = allSessions.filter(s => s.type === 'pair_code').length;
+  document.getElementById('statQR').textContent = allSessions.filter(s => s.type === 'qr_code').length;
+  document.getElementById('statToday').textContent = allSessions.filter(s => new Date(s.timestamp).toDateString() === today).length;
+
+  const recent = [...allSessions].sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp)).slice(0,8);
+  const tbody = document.getElementById('recentTable');
+  if (!recent.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No sessions yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = recent.map(s => `
+    <tr>
+      <td><b>+${s.phoneNumber}</b></td>
+      <td><span class="badge ${s.type === 'qr_code' ? 'badge-qr' : 'badge-pair'}">
+        <i class="fas fa-${s.type === 'qr_code' ? 'qrcode' : 'key'}"></i>
+        ${s.type === 'qr_code' ? 'QR' : 'Pair'}
+      </span></td>
+      <td style="color:var(--muted)">${relativeTime(s.timestamp)}</td>
+      <td><button class="btn btn-cyan btn-sm" onclick="openModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+        <i class="fas fa-eye"></i> View
+      </button></td>
+    </tr>`).join('');
+}
+
+// ── Sessions Table ──────────────────────────────────────────────────────────────
+async function loadSessions() {
+  allSessions = await fetchSessions();
+  renderSessions(allSessions);
+}
+
+function renderSessions(sessions) {
+  const tbody = document.getElementById('sessionsTable');
+  const sorted = [...sessions].sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp));
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No sessions</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(s => {
+    const preview = s.sessionId ? s.sessionId.slice(0,30) + '…' : '—';
+    return `<tr>
+      <td><b>+${s.phoneNumber}</b></td>
+      <td><span class="badge ${s.type === 'qr_code' ? 'badge-qr' : 'badge-pair'}">
+        <i class="fas fa-${s.type === 'qr_code' ? 'qrcode' : 'key'}"></i>
+        ${s.type === 'qr_code' ? 'QR' : 'Pair'}
+      </span></td>
+      <td style="color:var(--muted)">${new Date(s.timestamp).toLocaleString()}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--cyan)">${preview}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-cyan btn-sm" onclick="openModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-green btn-sm" onclick="downloadCredsFor('${s.phoneNumber}')">
+            <i class="fas fa-download"></i>
+          </button>
+          <button class="btn btn-red btn-sm" onclick="confirmDelete('${s.phoneNumber}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterSessions() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  renderSessions(allSessions.filter(s => s.phoneNumber.includes(q)));
+}
+
+// ── Deploy List ─────────────────────────────────────────────────────────────────
+async function loadDeployList() {
+  allSessions = await fetchSessions();
+  const el = document.getElementById('deploySessionList');
+  if (!allSessions.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">No sessions available. <a href="/" style="color:var(--cyan)">Generate one first →</a></p>';
+    return;
+  }
+  const sorted = [...allSessions].sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp));
+  el.innerHTML = sorted.map(s => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:600;margin-bottom:4px;">+${s.phoneNumber}</div>
+        <div style="font-size:12px;color:var(--muted)">${new Date(s.timestamp).toLocaleString()} · ${s.type}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-green btn-sm" onclick="downloadCredsFor('${s.phoneNumber}')">
+          <i class="fas fa-download"></i> creds.json
+        </button>
+        <button class="btn btn-cyan btn-sm" onclick="openModal(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+          <i class="fas fa-rocket"></i> Deploy
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+// ── Modal ───────────────────────────────────────────────────────────────────────
+let currentSession = null;
+
+function openModal(s) {
+  if (typeof s === 'string') s = JSON.parse(s);
+  currentSession = s;
+  document.getElementById('modalTitle').textContent = `Session: +${s.phoneNumber}`;
+  document.getElementById('modalInfo').innerHTML = `
+    <span class="info-tag"><i class="fas fa-phone"></i> +${s.phoneNumber}</span>
+    <span class="info-tag"><i class="fas fa-${s.type === 'qr_code' ? 'qrcode' : 'key'}"></i> ${s.type}</span>
+    <span class="info-tag"><i class="fas fa-clock"></i> ${new Date(s.timestamp).toLocaleString()}</span>`;
+  document.getElementById('sessionStrContent').textContent = s.sessionId || '—';
+  document.getElementById('sessionModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('sessionModal').classList.remove('open');
+  currentSession = null;
+}
+
+function copySessionStr() {
+  const str = document.getElementById('sessionStrContent').textContent;
+  navigator.clipboard.writeText(str).then(() => showToast('✅ Session string copied!', 'success'));
+}
+
+async function downloadCreds() {
+  if (!currentSession) return;
+  downloadCredsFor(currentSession.phoneNumber);
+}
+
+function downloadCredsFor(phone) {
+  const a = document.createElement('a');
+  a.href = `/admin/api/sessions/${phone}/creds`;
+  a.download = `creds_${phone}.json`;
+  a.click();
+}
+
+async function deleteSession() {
+  if (!currentSession) return;
+  confirmDelete(currentSession.phoneNumber);
+}
+
+async function confirmDelete(phone) {
+  if (!confirm(`Delete session for +${phone}?`)) return;
+  const r = await fetch(`/admin/api/sessions/${phone}`, { method: 'DELETE' });
+  const d = await r.json();
+  if (d.ok) {
+    showToast('🗑️ Session deleted', 'success');
+    closeModal();
+    loadSessions();
+    loadDashboard();
+  } else {
+    showToast('❌ Delete failed', 'error');
+  }
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Refresh ──────────────────────────────────────────────────────────────────────
+function refreshAll() {
+  loadDashboard();
+  showToast('🔄 Refreshed', 'success');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────────
+function init() { loadDashboard(); }
+
+// Close modal on overlay click
+document.getElementById('sessionModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+</script>
+</body>
+</html>
